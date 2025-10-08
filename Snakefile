@@ -8,9 +8,15 @@ srrs = gaboriau + anothernine + ['SRR26235419', 'SRR6685843']
 
 rule master :
     input :
-        expand(data + '{s}.fastq', s = srrs)
+        expand(data + '{s}.fastq.gz', s = srrs)
 
 #----------------------------------------------------------------------
+
+# gzip a fastq file
+rule gzip :
+    input : '{path}.fastq'
+    output : '{path}.fastq.gz'
+    shell : 'gzip {input} && touch {output}'
 
 # download a fastq file with fastqdump
 rule fastqdump :

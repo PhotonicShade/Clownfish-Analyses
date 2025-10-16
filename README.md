@@ -1,3 +1,3 @@
 Citation:
 ______________
-This is using the methods from the gabreaiu study
+Part of this pipeline reproduces the methods outlined in Gaboriau et al. (https://doi.org/10.1073/pnas.2419716122)

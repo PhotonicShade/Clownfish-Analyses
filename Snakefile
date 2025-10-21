@@ -11,7 +11,12 @@ alib = 'TruSeq3-PE.fa'
 
 rule master :
     input :
-        expand(data + '{s}.fastq.trim.gz', s = srrs)
+        # trimmed readsets
+        expand(data + '{s}.trim.fastq.gz', s = srrs),
+
+        # read qualities
+        expand(data + '{s}_fastqc.html', s = srrs),
+        expand(data + '{s}.trim_fastqc.html', s = srrs),
 
 #----------------------------------------------------------------------
 
@@ -20,13 +25,13 @@ rule trim :
     input :
         prg = trim,
         lib = alib,
-        fa = '{path}.fastq.gz'
+        fa = '{path}/SRR{num}.fastq.gz'
 
-    output : '{path}.fastq.trim.gz'
+    output : '{path}/SRR{num,[0-9]+}.trim.fastq.gz'
 
     log :
-        log = '{path}.fastq.trim.log',
-        err = '{path}.fastq.trim.err'
+        log = '{path}/SRR{num}.trim.fastq.log',
+        err = '{path}/SRR{num}.trim.fastq.err'
 
     shell : '''
 
@@ -35,22 +40,19 @@ rule trim :
 
 # gzip a fastq file
 rule gzip :
-    input : '{path}.fastq'
-    output : '{path}.fastq.gz'
+    input : '{path}/SRR{num}.fastq'
+    output : '{path}/SRR{num,[0-9]+}.fastq.gz'
 
     shell : 'gzip {input} && touch {output}'
 
 # download a fastq file with fastqdump
 rule fastqdump :
-    params :
-        lambda wildcards : wildcards.path.rsplit('/', 1)[1]
-
-    output : '{path}.fastq'
-    log : '{path}.fastqdump.log'
+    output : '{path}/SRR{num,[0-9]+}.fastq'
+    log : '{path}/SRR{num}.fastqdump.log'
 
     shell : '''
 
-  fastq-dump {params} --outdir {data} > {log} 2>&1
+  fastq-dump SRR{wildcards.num} --outdir {data} > {log} 2>&1
   touch {output} '''
 
 # trimmomatic
@@ -78,3 +80,14 @@ rule get_trimmomatic :
 
   cd trimmomatic && wget http://www.usadellab.org/cms/uploads/supplementary/Trimmomatic/Trimmomatic-0.36.zip && cd ..
   touch {output} '''
+
+# collect some statistics
+#----------------------------------------------------------------------
+
+# quality check with fastqc
+rule fastqc :
+    input : '{path}.fastq.gz'
+    output : '{path}_fastqc.html'
+    log : '{path}_fastqc.log'
+             
+    shell : 'fastqc {input} > {log} 2>&1 && touch {output}'

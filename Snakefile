@@ -5,18 +5,18 @@ anothernine = ['SRR84426{}'.format(x) for x in range(10, 21)]
 srrs = gaboriau + anothernine + ['SRR26235419', 'SRR6685843']
 
 trim = 'trimmomatic/Trimmomatic-0.36/trimmomatic-0.36.jar'
-alib = 'TruSeq3-PE.fa'
+libs = ['TruSeq3-PE', 'TruSeq3-SE']
 
 #----------------------------------------------------------------------
 
 rule master :
     input :
         # trimmed readsets
-        expand(data + '{s}.trim.fastq.gz', s = srrs),
+        expand(data + '{s}.trim:{lib}.fastq.gz', s = srrs, lib = libs),
 
         # read qualities
         expand(data + '{s}_fastqc.html', s = srrs),
-        expand(data + '{s}.trim_fastqc.html', s = srrs),
+        expand(data + '{s}.trim:{lib}_fastqc.html', s = srrs, lib = libs),
 
 #----------------------------------------------------------------------
 
@@ -24,19 +24,19 @@ rule master :
 rule trim :
     input :
         prg = trim,
-        lib = alib,
+        lib = '{lib}.fa',
         fa = '{path}/SRR{num}.fastq.gz'
 
-    output : '{path}/SRR{num,[0-9]+}.trim.fastq.gz'
+    output : '{path}/SRR{num,[0-9]+}.trim:{lib}.fastq.gz'
 
     log :
-        log = '{path}/SRR{num}.trim.fastq.log',
-        err = '{path}/SRR{num}.trim.fastq.err'
+        log = '{path}/SRR{num}.trim:{lib}.fastq.log',
+        err = '{path}/SRR{num}.trim:{lib}.fastq.err'
 
     shell : '''
 
   java -jar {input.prg} SE -phred33 {input.fa} {output} -trimlog {log.log} \
-    ILLUMINACLIP:{input.lib}:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 > {log.err} 2>&1 '''
+    ILLUMINACLIP:{wildcards.lib}.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 > {log.err} 2>&1 '''
 
 # gzip a fastq file
 rule gzip :
@@ -61,7 +61,7 @@ rule fastqdump :
 # setup library
 rule setup_library :
     input : trim
-    output : alib
+    output : '{lib}.fa'
     shell : 'cp trimmomatic/Trimmomatic-0.36/adapters/{output} {output}'
 
 # unpack trimmomatic

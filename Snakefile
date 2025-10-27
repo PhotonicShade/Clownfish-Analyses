@@ -7,12 +7,14 @@ srrs = gaboriau + anothernine + ['SRR26235419', 'SRR6685843']
 trim = 'trimmomatic/Trimmomatic-0.36/trimmomatic-0.36.jar'
 libs = ['TruSeq3-PE', 'TruSeq3-SE']
 
+reference = data + 'A_frenatus/afrenatus.transcripts.uniprot.fa'
+
 #----------------------------------------------------------------------
 
 rule master :
     input :
         # trimmed readsets
-        expand(data + '{s}.trim:{lib}.fastq.gz', s = srrs, lib = libs),
+        expand(data + '{s}.trim:{lib}.bwa.bam', s = srrs, lib = libs),
 
         # read qualities
         expand(data + '{s}_fastqc.html', s = srrs),
@@ -20,6 +22,30 @@ rule master :
 
 #----------------------------------------------------------------------
 
+# align sequences with bwa and store directly as bam
+rule align :
+    input :
+        ref = reference,
+        ind = reference + '.bwt',
+        reads = '{path}/SRR{num}.trim:{lib}.fastq.gz'
+
+    output : '{path}/SRR{num,[0-9]+}.trim:{lib}.bwa.bam'
+
+    log :
+        log = '{path}/SRR{num}.trim:{lib}.bwa.log',
+        time = '{path}/SRR{num}.trim:{lib}.bwa.time',
+
+    shell : '''
+
+  /usr/bin/time -vo {log.time} \
+    bwa mem {input.ref} {input.reads} 2> {log.log} \
+      | samtools sort -o {output} - >> {log.log} 2>&1 '''
+
+rule index :
+    input : reference
+    output : reference + '.bwt'
+    shell : 'bwa index {input} && touch {output}'
+    
 # trim adaptors from a gzipped fastq file using trimmomatic
 rule trim :
     input :
@@ -61,7 +87,7 @@ rule fastqdump :
 # setup library
 rule setup_library :
     input : trim
-    output : '{lib}.fa'
+    output : '{lib,.+-(SE|PE)}.fa'
     shell : 'cp trimmomatic/Trimmomatic-0.36/adapters/{output} {output}'
 
 # unpack trimmomatic

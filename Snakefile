@@ -14,13 +14,30 @@ reference = data + 'A_frenatus/afrenatus.transcripts.uniprot.fa'
 rule master :
     input :
         # trimmed readsets
-        expand(data + '{s}.trim:{lib}.bwa.bam', s = srrs, lib = libs),
+        expand(data + '{s}.trim:{lib}.bwa.filt.mark.bam', s = srrs, lib = libs),
 
         # read qualities
         expand(data + '{s}_fastqc.html', s = srrs),
         expand(data + '{s}.trim:{lib}_fastqc.html', s = srrs, lib = libs),
 
 #----------------------------------------------------------------------
+
+# remove duplicate reads with markdup
+rule markdup :
+    input : '{path}/SRR{num}.trim:{lib}.bwa.filt.bam'
+    output : '{path}/SRR{num,[0-9]+}.trim:{lib}.bwa.filt.mark.bam'
+    log : '{path}/SRR{num}.trim:{lib}.bwa.filt.mark.log'
+    shell : 'samtools markdup -r {input} {output}'
+
+# filter unmapped and secondary alignments
+rule filter :
+    input : '{path}/SRR{num}.trim:{lib}.bwa.bam'
+    output : '{path}/SRR{num,[0-9]+}.trim:{lib}.bwa.filt.bam'
+    log : '{path}/SRR{num}.trim:{lib}.bwa.filt.log'
+    shell : '''
+
+  samtools view -h {input} -F 260 2> {log} \
+    | samtools sort -o {output} - >> {log} 2>&1 '''
 
 # align sequences with bwa and store directly as bam
 rule align :

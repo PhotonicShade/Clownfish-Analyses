@@ -8,13 +8,14 @@ trim = 'trimmomatic/Trimmomatic-0.36/trimmomatic-0.36.jar'
 libs = ['TruSeq3-PE', 'TruSeq3-SE']
 
 reference = data + 'A_frenatus/afrenatus.transcripts.uniprot.fa'
+rdict = data + 'A_frenatus/afrenatus.transcripts.uniprot.dict' # kludge: could use lambda instead
 
 #----------------------------------------------------------------------
 
 rule master :
     input :
         # trimmed readsets
-        expand(data + '{s}.trim:{lib}.bwa.filt.mark.bam', s = srrs, lib = libs),
+        expand(data + '{s}.trim:{lib}.bwa.filt.mark.rgs.calls.vcf.gz', s = srrs, lib = libs),
 
         # read qualities
         expand(data + '{s}_fastqc.html', s = srrs),
@@ -22,6 +23,60 @@ rule master :
 
 #----------------------------------------------------------------------
 
+# call variants with GATK HaplotypeCaller
+rule call :
+    input :
+        ref = reference,
+        fai = reference + '.fai',
+        dic = rdict,
+        bam = '{path}/SRR{num}.trim:{lib}.bwa.filt.mark.rgs.bam'
+
+    output : '{path}/SRR{num,[0-9]+}.trim:{lib}.bwa.filt.mark.rgs.calls.vcf.gz'
+    log : '{path}/SRR{num}.trim:{lib}.bwa.filt.mark.rgs.calls.log'
+
+    shell : '''
+
+  gatk --java-options "-Xmx4g" HaplotypeCaller \
+    -R {input.ref} -I {input.bam} -O {output} > {log} 2>&1 '''
+
+rule faidx :
+    input : reference
+    output : reference + '.fai'
+    shell : 'samtools faidx {input} && touch {output}'
+
+rule fadict :
+    input : reference
+    output : rdict
+    shell : 'samtools dict {input} > {output}'        
+
+# prepare aligned sequences for GATK
+#----------------------------------------------------------------------
+
+# add readgroups to a bam file
+rule add_readgroups :
+    input :
+        prgm = 'scripts/picard.jar',
+        bam = '{path}/SRR{num}.trim:{lib}.bwa.filt.mark.bam',
+    output : '{path}/SRR{num,[0-9]+}.trim:{lib}.bwa.filt.mark.rgs.bam',
+    log : '{path}/SRR{num}.trim:{lib}.bwa.filt.mark.rgs.log',
+
+    shell : '''
+
+  java -jar scripts/picard.jar AddOrReplaceReadGroups \
+    I={input.bam} O={output} \
+    SORT_ORDER=coordinate \
+    RGID=id1 RGLB=lib1 RGPL=illumina RGSM=sample1 RGPU=unit1 \
+    CREATE_INDEX=True > {log} 2>&1 '''
+
+# obtain picard
+picardlink = 'https://github.com/broadinstitute/picard/releases/download/3.4.0/picard.jar'
+rule get_picard :
+    output : 'scripts/picard.jar'
+    shell : 'wget -O {output} {picardlink}'
+
+# align sequences, filter and remove duplicates
+#----------------------------------------------------------------------
+            
 # remove duplicate reads with markdup
 rule markdup :
     input : '{path}/SRR{num}.trim:{lib}.bwa.filt.bam'
@@ -62,7 +117,10 @@ rule index :
     input : reference
     output : reference + '.bwt'
     shell : 'bwa index {input} && touch {output}'
-    
+
+# obtain fasta from SRA, compress and trim
+#----------------------------------------------------------------------
+            
 # trim adaptors from a gzipped fastq file using trimmomatic
 rule trim :
     input :

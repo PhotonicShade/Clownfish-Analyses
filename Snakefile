@@ -14,14 +14,47 @@ rdict = data + 'A_frenatus/afrenatus.transcripts.uniprot.dict' # kludge: could u
 
 rule master :
     input :
-        # trimmed readsets
-        expand(data + '{s}.trim:{lib}.bwa.filt.mark.rgs.calls.vcf.gz', s = srrs, lib = libs),
+        # set of SNPs
+        expand(data + '{s}.trim:{lib}.bwa.filt.mark.rgs.calls.snps.filt.vcf.gz', s = srrs, lib = libs),
 
         # read qualities
         expand(data + '{s}_fastqc.html', s = srrs),
         expand(data + '{s}.trim:{lib}_fastqc.html', s = srrs, lib = libs),
 
+# call variants, select and filter
 #----------------------------------------------------------------------
+
+# filter the SNPs based on various criteria
+rule filtration :
+    input :
+        ref = reference,
+        vcf = '{path}/SRR{num}.trim:{lib}.bwa.filt.mark.rgs.calls.snps.vcf.gz'
+
+    output : '{path}/SRR{num,[0-9]+}.trim:{lib}.bwa.filt.mark.rgs.calls.snps.filt.vcf.gz'
+    log : '{path}/SRR{num}.trim:{lib}.bwa.filt.mark.rgs.calls.snps.filt.log'
+
+    shell : '''
+
+  gatk VariantFiltration -R {input.ref} -V {input.vcf} \
+    -filter-name "QD_filter" -filter "QD < 2.0" \
+    -filter-name "FS_filter" -filter "FS > 200.0" \
+    -filter-name "ReadPosRankSum_filter" -filter "ReadPosRankSum < -20.0" \
+    -filter-name "SOR_filter" -filter "SOR > 10.0" \
+      -O {output} > {log} 2>&1 '''
+
+# select only SNPs from the calls
+rule select :
+    input :
+        ref = reference,
+        vcf = '{path}/SRR{num}.trim:{lib}.bwa.filt.mark.rgs.calls.vcf.gz'
+
+    output : '{path}/SRR{num,[0-9]+}.trim:{lib}.bwa.filt.mark.rgs.calls.snps.vcf.gz'
+    log : '{path}/SRR{num}.trim:{lib}.bwa.filt.mark.rgs.calls.snps.log'
+
+    shell : '''
+
+  gatk SelectVariants -R {input.ref} -V {input.vcf} \
+    -select-type SNP -O {output} > {log} 2>&1 '''
 
 # call variants with GATK HaplotypeCaller
 rule call :
@@ -49,10 +82,7 @@ rule fadict :
     output : rdict
     shell : 'samtools dict {input} > {output}'        
 
-# prepare aligned sequences for GATK
-#----------------------------------------------------------------------
-
-# add readgroups to a bam file
+# prepare bam file for GATK: add readgroups
 rule add_readgroups :
     input :
         prgm = 'scripts/picard.jar',

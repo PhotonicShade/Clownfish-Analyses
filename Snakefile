@@ -14,8 +14,8 @@ rdict = data + 'A_frenatus/afrenatus.transcripts.uniprot.dict' # kludge: could u
 
 rule master :
     input :
-        # set of SNPs
-        expand(data + '{s}.trim:{lib}.bwa.filt.mark.rgs.calls.snps.filt.vcf.gz', s = srrs, lib = libs),
+        # table for each library
+        expand(data + 'SRRs.{lib}.csv', lib = libs),
 
         # read qualities
         expand(data + '{s}_fastqc.html', s = srrs),
@@ -23,6 +23,24 @@ rule master :
 
 # call variants, select and filter
 #----------------------------------------------------------------------
+
+# build table with SNPs on the rows and SRRs on the columns for a given library
+rule tabulate :
+    input :
+        expand(data + '{s}.trim:{{lib}}.bwa.filt.mark.rgs.calls.snps.filt.txt', s = srrs)
+
+    output : '{path}/SRRs.{lib}.csv'
+    shell : 'python3 scripts/tabulate.py {input} > {output}'
+
+# just keep the uniqe SNP positions
+rule snps :
+    input : '{path}/SRR{num}.trim:{lib}.bwa.filt.mark.rgs.calls.snps.filt.vcf.gz'
+    output : '{path}/SRR{num,[0-9]+}.trim:{lib}.bwa.filt.mark.rgs.calls.snps.filt.txt'
+    shell : '''
+
+  zcat {input} \
+    | awk '/^#CHROM/ {{s=1}} s {{if($7=="PASS" && length($5)==1) {{print $1" "$2" "$5}}}}' \
+      > {output} '''
 
 # filter the SNPs based on various criteria
 rule filtration :

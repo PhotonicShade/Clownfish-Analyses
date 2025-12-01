@@ -4,6 +4,10 @@ gaboriau = ['SRR295227{}'.format(x) for x in range(58, 77)]
 anothernine = ['SRR84426{}'.format(x) for x in range(10, 21)]
 srrs = gaboriau + anothernine + ['SRR26235419', 'SRR6685843']
 
+left = ['SRR84426{}'.format(x) for x in range(10, 14)]
+right = ['SRR84426{}'.format(x) for x in range(15, 21)]
+srrss = gaboriau + left + right + ['SRR26235419', 'SRR6685843'] # omit SRR8442614
+
 trim = 'trimmomatic/Trimmomatic-0.36/trimmomatic-0.36.jar'
 libs = ['TruSeq3-PE', 'TruSeq3-SE']
 
@@ -15,7 +19,7 @@ rdict = data + 'A_frenatus/afrenatus.transcripts.uniprot.dict' # kludge: could u
 rule master :
     input :
         # table for each library
-        expand(data + 'SRRs.{lib}.csv', lib = libs),
+        expand(data + 'SRRs.{lib}.pruned.csv', lib = libs),
 
         # read qualities
         expand(data + '{s}_fastqc.html', s = srrs),
@@ -24,10 +28,16 @@ rule master :
 # call variants, select and filter
 #----------------------------------------------------------------------
 
+# prune down to universal rows (no '-'s) with at least one variation
+rule prune :
+    input : '{path}/SRRs.{lib}.csv'
+    output : '{path}/SRRs.{lib}.pruned.csv'
+    shell : 'grep -v "-" {input} | python3 scripts/prune.py - > {output}'
+
 # build table with SNPs on the rows and SRRs on the columns for a given library
 rule tabulate :
     input :
-        expand(data + '{s}.trim:{{lib}}.bwa.filt.mark.rgs.calls.snps.filt.txt', s = srrs)
+        expand(data + '{s}.trim:{{lib}}.bwa.filt.mark.rgs.calls.snps.filt.txt', s = srrss)
 
     output : '{path}/SRRs.{lib}.csv'
     shell : 'python3 scripts/tabulate.py {input} > {output}'
